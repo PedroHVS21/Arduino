@@ -1,0 +1,149 @@
+#include <ArduinoWiFiServer.h>
+#include <BearSSLHelpers.h>
+#include <CertStoreBearSSL.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiAP.h>
+#include <ESP8266WiFiGeneric.h>
+#include <ESP8266WiFiGratuitous.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266WiFiScan.h>
+#include <ESP8266WiFiSTA.h>
+#include <ESP8266WiFiType.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
+#include <WiFiClientSecureBearSSL.h>
+#include <WiFiServer.h>
+#include <WiFiServerSecure.h>
+#include <WiFiServerSecureBearSSL.h>
+#include <WiFiUdp.h>
+#include <ESP8266WiFi.h>
+#include <ArduinoJson.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#include <Wire.h>
+#include "DHT.h"
+
+#define DHTPIN D1
+#define DHTTYPE DHT11
+
+DHT DHT_SENSOR(DHTPIN, DHT11);
+
+// declaração das credenciais da rede
+const char *WIFI_SSID = "NOS-81D2";
+const char *WIFI_PASSWORD = "H4UXJWW2";
+
+//declaração das variáveis
+
+float humidity = 0;
+float temperature = 0;
+int soilState = 0;
+
+
+void setup(){
+  
+  Serial.begin(9600);
+  WiFiServer server(80);
+
+  DHT_SENSOR.begin();
+
+  // Conexão com a internet via wifi
+  Serial.print("Connecting to WIFI ->  ");
+  Serial.println(WIFI_SSID);
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("");
+  Serial.println("WiFi connected");
+
+  // Arranque do servidor
+  server.begin();
+  Serial.println("Server started");
+
+  // Imprime o endereço IP
+  Serial.print("Use this URL to connect Wifi: ");
+  Serial.print(WiFi.localIP());
+  Serial.println("/");
+  }
+
+// inicio da comunicação do serial
+void loop(){
+
+
+// float h = DHT_SENSOR.readHumidity(); 
+ humidity = DHT_SENSOR.readHumidity();
+
+  // Temperatura em Celsious
+  temperature = DHT_SENSOR.readTemperature(); 
+
+  // Verifique se alguma leitura falhou e tenta novamente.
+  if (isnan(humidity) || isnan(temperature))
+  {
+    Serial.println(F("Falha de leitura do sensor DHT!"));
+    return;
+  }
+
+  // inicio da leitura do sensor de leitua do solo
+   soilState = analogRead(A0); // leitura do sensor de estado do solo do pino A0 e armazenamentodo mesmo em senorValue
+    Serial.println();
+
+  Serial.print(F("Humidade: "));
+  Serial.print(humidity);
+  Serial.print(F("%  Temperatura: "));
+  Serial.print(temperature);
+  Serial.print(F("°C "));
+  Serial.println();
+  Serial.print("Estado do Solo: ");
+
+  
+  if(soilState>550){
+    
+    Serial.print("Seco");
+    }
+    
+  else
+       {
+  Serial.print("Humido");
+    }
+ 
+  delay(250); 
+
+   Serial.println();
+  Serial.println();
+  Serial.println("Começando a comunicacao com a API");
+
+  StaticJsonDocument<300> doc;
+  doc["idArduino"] = "Ard-123";
+  doc["humAr"] = humidity;
+  doc["tempAr"] = temperature;
+  doc["estadoSolo"] = soilState;
+  
+  
+  String json;
+  serializeJson(doc, json);
+  serializeJsonPretty(doc, Serial);
+
+ 
+
+ Serial.println("");
+ Serial.println("");
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.begin(client, "https://agrosolo.herokuapp.com/update");
+  http.addHeader("Content-Type", "application/json");
+  http.POST(json);
+
+  Serial.print(http.getString());
+  Serial.println();
+
+  http.end();
+
+  delay(10000); // irá demorar 2 segundos até voltar a analisar o estado
+   }
